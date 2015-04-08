@@ -1,4 +1,4 @@
-import sublime, sublime_plugin, os, urllib.parse, urllib.request
+import sublime, sublime_plugin, os, urllib.parse, urllib.request, re
 
 class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 	def __init__(self):
@@ -36,7 +36,6 @@ class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 
 
 	def fetch_diagram(self, server, text, outputFile, style = 'vs2010' ):
-		print(server)
 		request = {}
 		request["message"] = text
 		request["style"] = style
@@ -45,10 +44,10 @@ class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 		url = urllib.parse.urlencode(request)
 
 		f = urllib.request.urlopen("http://" + server + "/", str.encode(url))
-		line = f.readline()
+		line = f.readline().decode("utf-8")
 		f.close()
 
-		expr = re.compile("(\?(img|pdf|svg)=[a-zA-Z0-9]+)")
+		expr = re.compile("(\?(img|pdf|svg|png)=[a-zA-Z0-9]+)")
 		m = expr.search(line)
 
 		if m == None:
