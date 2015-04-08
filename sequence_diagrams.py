@@ -33,9 +33,15 @@ class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 					continue
 				contents += line
 
+			self.fetch_diagram(
+				view.settings().get("sequence_server"),
+				contents,
+				filename)
+
 
 
 	def fetch_diagram(self, server, text, outputFile, style = 'vs2010' ):
+		print(server)
 		request = {}
 		request["message"] = text
 		request["style"] = style
