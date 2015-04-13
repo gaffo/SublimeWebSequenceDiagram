@@ -1,4 +1,4 @@
-import sublime, sublime_plugin, os, urllib.parse, urllib.request, re
+import sublime, sublime_plugin, os, urllib.parse, urllib.request, re, hashlib, shelve, time
 
 class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 	def __init__(self):
@@ -9,6 +9,8 @@ class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 		self.settings = None
 
 	def on_post_save(self, view):
+		start = time.time()
+
 		if not view.file_name().endswith(".seq"):
 			return
 		if not view.settings().get("sequence_server"):
@@ -16,32 +18,52 @@ class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 			view.window().show_input_panel("Sequence Diagram Server/Port?", "", self.set_server, None, None)
 			return
 
-		print("saving sequence")
+		print("{}: {}: {}".format("Settings Check", time.time(), (time.time() - start)))
+
+		print(view.file_name() + ".sums")
+		sums = shelve.open(view.file_name() + ".sums")
+
+		print("{}: {}: {}".format("Shelf Pulled", time.time(), (time.time() - start)))
 
 		filename = None
 		contents = ""
 		with open(view.file_name(), "r") as ins:
 			for line in ins:
 				if line.startswith(":"):
+					print("{}: {}: {}".format("Loop", time.time(), (time.time() - start)))
 					if filename:
-						self.fetch_diagram(
-							view.settings().get("sequence_server"),
-							contents,
-							filename)
+						self.fetch_if(contents, filename, view.settings().get("sequence_server"), sums)
 					filename = os.path.join(os.path.dirname(view.file_name()), line[1:].strip() + ".png")
 					contents = ""
 					continue
 				contents += line
 
+			self.fetch_if(contents, filename, view.settings().get("sequence_server"), sums)
+
+			print("{}: {}: {}".format("Done Loop", time.time(), (time.time() - start)))
+			sums.close()
+
+
+		print("{}: {}: {}".format("Sums Written", time.time(), (time.time() - start)))
+
+	def fetch_if(self, text, filename, server, sums):
+		m = hashlib.md5()
+		m.update(text.encode('utf-8'))
+		md5 = m.hexdigest()
+
+		if (filename not in sums) or md5 != sums[filename]:
 			self.fetch_diagram(
-				view.settings().get("sequence_server"),
-				contents,
+				server,
+				text,
 				filename)
+		else:
+			print("Skipping " + filename)
 
-
+		sums[filename] = md5
 
 	def fetch_diagram(self, server, text, outputFile, style = 'vs2010' ):
-		print(server)
+		start = time.time()
+		print("Generating " + outputFile + " From " + server)
 		request = {}
 		request["message"] = text
 		request["style"] = style
@@ -62,4 +84,6 @@ class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 
 		urllib.request.urlretrieve("http://" + server + "/" + m.group(0),
 				outputFile )
+
+		print("{}: {}: {}".format("Fetch", time.time(), (time.time() - start)))
 		return True
