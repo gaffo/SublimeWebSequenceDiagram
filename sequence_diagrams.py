@@ -1,50 +1,47 @@
-import sublime, sublime_plugin, os, urllib.parse, urllib.request, re, hashlib, shelve, time
+import sublime, sublime_plugin, os, urllib.parse, urllib.request, re, hashlib, shelve, time, threading
 
-class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
-	def __init__(self):
-		self.settings = None
+class SequencePuller(threading.Thread):
+	running = None
 
-	def set_server(self, text):
-		self.settings.set("sequence_server", text)
-		self.settings = None
+	def __init__(self, file_name, server):
+		self.file_name = file_name
+		self.start_time = time.time()
+		self.server = server
+		threading.Thread.__init__(self)
 
-	def on_post_save(self, view):
-		start = time.time()
-
-		if not view.file_name().endswith(".seq"):
-			return
-		if not view.settings().get("sequence_server"):
-			self.settings = view.settings()
-			view.window().show_input_panel("Sequence Diagram Server/Port?", "", self.set_server, None, None)
+	def run(self):
+		if SequencePuller.running != None:
+			print("Currently Running, Aborting")
 			return
 
-		print("{}: {}: {}".format("Settings Check", time.time(), (time.time() - start)))
+		SequencePuller.running = self
 
-		print(view.file_name() + ".sums")
-		sums = shelve.open(view.file_name() + ".sums")
+		print(self.file_name + ".sums")
+		sums = shelve.open(self.file_name + ".sums")
 
-		print("{}: {}: {}".format("Shelf Pulled", time.time(), (time.time() - start)))
+		print("{}: {}: {}".format("Shelf Pulled", self.file_name, (time.time() - self.start_time)))
 
 		filename = None
 		contents = ""
-		with open(view.file_name(), "r") as ins:
+		with open(self.file_name, "r") as ins:
 			for line in ins:
 				if line.startswith(":"):
-					print("{}: {}: {}".format("Loop", time.time(), (time.time() - start)))
+					print("{}: {}: {}".format("Loop", time.time(), (time.time() - self.start_time)))
 					if filename:
-						self.fetch_if(contents, filename, view.settings().get("sequence_server"), sums)
-					filename = os.path.join(os.path.dirname(view.file_name()), line[1:].strip() + ".png")
+						self.fetch_if(contents, filename, self.server, sums)
+					filename = os.path.join(os.path.dirname(self.file_name), line[1:].strip() + ".png")
 					contents = ""
 					continue
 				contents += line
 
-			self.fetch_if(contents, filename, view.settings().get("sequence_server"), sums)
+			self.fetch_if(contents, filename, self.server, sums)
 
-			print("{}: {}: {}".format("Done Loop", time.time(), (time.time() - start)))
+			print("{}: {}: {}".format("Done Loop", time.time(), (time.time() - self.start_time)))
 			sums.close()
 
+		print("{}: {}: {}".format("Sums Written", time.time(), (time.time() - self.start_time)))
 
-		print("{}: {}: {}".format("Sums Written", time.time(), (time.time() - start)))
+		running = None
 
 	def fetch_if(self, text, filename, server, sums):
 		m = hashlib.md5()
@@ -85,5 +82,26 @@ class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 		urllib.request.urlretrieve("http://" + server + "/" + m.group(0),
 				outputFile )
 
-		print("{}: {}: {}".format("Fetch", time.time(), (time.time() - start)))
+		print("{}: {}: {}".format("Fetch", time.time(), (time.time() - self.start_time)))
 		return True
+
+
+class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
+	def __init__(self):
+		self.settings = None
+
+	def set_server(self, text):
+		self.settings.set("sequence_server", text)
+		self.settings = None
+
+	def on_post_save(self, view):
+		self.file_name = view.file_name()
+		if not self.file_name.endswith(".seq"):
+			return
+		if not view.settings().get("sequence_server"):
+			self.settings = view.settings()
+			view.window().show_input_panel("Sequence Diagram Server/Port?", "", self.set_server, None, None)
+			return
+
+		thread = SequencePuller(self.file_name, view.settings().get("sequence_server"))
+		thread.start()
