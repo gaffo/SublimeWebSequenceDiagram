@@ -60,8 +60,8 @@ class SequencePuller(threading.Thread):
 					contents = ""
 					continue
 				contents += line
-
-			self.fetch_if(contents, filename, self.server, sums)
+			if filename:
+				self.fetch_if(contents, filename, self.server, sums)
 
 			print("{}: {}: {}".format("Done Loop", time.time(), (time.time() - self.start_time)))
 			sums.close()
