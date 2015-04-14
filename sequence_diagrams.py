@@ -1,7 +1,9 @@
 import sublime, sublime_plugin, os, urllib.parse, urllib.request, re, hashlib, shelve, time, threading
 
 class SequencePuller(threading.Thread):
+	lock = threading.RLock()
 	running = None
+	nxt = None
 
 	def __init__(self, file_name, server):
 		self.file_name = file_name
@@ -9,12 +11,37 @@ class SequencePuller(threading.Thread):
 		self.server = server
 		threading.Thread.__init__(self)
 
-	def run(self):
-		if SequencePuller.running != None:
-			print("Currently Running, Aborting")
-			return
+	@classmethod
+	def enqueue(cls, file_name, server):
+		SequencePuller.lock.acquire()
+		thread = SequencePuller(file_name, server)
 
-		SequencePuller.running = self
+		if SequencePuller.running:
+			print("Enqueuing: {}".format(thread))
+			SequencePuller.nxt = thread
+		else:
+			print("Running: {}".format(thread))
+			SequencePuller.running = thread
+			thread.start()
+
+		SequencePuller.lock.release()
+
+	def finish():
+		SequencePuller.lock.acquire()
+
+		print("Thread Completion")
+
+		SequencePuller.running = None
+		if SequencePuller.nxt:
+			print("Popping: {}".format(SequencePuller.nxt))
+			SequencePuller.running = SequencePuller.nxt
+			SequencePuller.nxt = None
+			SequencePuller.running.start()
+
+		SequencePuller.lock.release()
+
+	def run(self):
+		print(self)
 
 		print(self.file_name + ".sums")
 		sums = shelve.open(self.file_name + ".sums")
@@ -41,7 +68,7 @@ class SequencePuller(threading.Thread):
 
 		print("{}: {}: {}".format("Sums Written", time.time(), (time.time() - self.start_time)))
 
-		running = None
+		SequencePuller.finish()
 
 	def fetch_if(self, text, filename, server, sums):
 		m = hashlib.md5()
@@ -103,5 +130,4 @@ class WebSequenceDiagramPlugin(sublime_plugin.EventListener):
 			view.window().show_input_panel("Sequence Diagram Server/Port?", "", self.set_server, None, None)
 			return
 
-		thread = SequencePuller(self.file_name, view.settings().get("sequence_server"))
-		thread.start()
+		SequencePuller.enqueue(self.file_name, view.settings().get("sequence_server"))
