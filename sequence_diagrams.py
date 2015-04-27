@@ -75,7 +75,7 @@ class SequencePuller(threading.Thread):
 		m.update(text.encode('utf-8'))
 		md5 = m.hexdigest()
 
-		if (filename not in sums) or md5 != sums[filename]:
+		if (filename not in sums) or not os.path.isfile(filename) or md5 != sums[filename]:
 			self.fetch_diagram(
 				server,
 				text,
